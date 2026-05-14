@@ -1,25 +1,61 @@
-from .bart_summarizer import BARTSummarizer
-from .t5_summarizer import T5Summarizer
-from .base import BaseSummarizer
+"""Factory for creating and managing summarizer instances."""
 
 from config import Config
-class SummarizerFactory(BaseSummarizer):
+from .bart_summarizer import BARTSummarizer
+from .t5_summarizer import T5Summarizer
+
+# Registry of available summarizer classes
+_SUMMARIZERS = {
+    "bart": BARTSummarizer,
+    "t5": T5Summarizer,
+}
+
+
+class SummarizerFactory:
+    """Lazily initializes and caches summarizer instances.
+
+    Uses the singleton ``Config`` to determine device placement.
+    Summarizers are instantiated on first use and reused thereafter.
+
+    Example::
+
+        factory = SummarizerFactory()
+        summaries = factory.summarize("bart", texts)
+    """
+
     def __init__(self):
         self.config = Config.get_instance()
-        self.summarizers = {
-            "bart": BARTSummarizer(device = self.config.device),
-            "t5": T5Summarizer(device = self.config.device)
-        }
+        self._instances = {}
 
-    def summarize(self,name, texts):
-        return self.summarizers[name].summarize(texts)
-    
-    
+    def _get_summarizer(self, name):
+        """Return a cached summarizer instance, creating it if needed.
 
-# def get_summarizer(name):
-#     if name == "bart":
-#         return BARTSummarizer()
-#     elif name == "t5":
-#         return T5Summarizer()
-#     else:
-#         raise ValueError(f"Unknown summarizer: {name}")
+        Args:
+            name: Model identifier ('bart' or 't5').
+
+        Returns:
+            Summarizer instance.
+
+        Raises:
+            ValueError: If *name* is not a registered summarizer.
+        """
+        if name not in _SUMMARIZERS:
+            raise ValueError(
+                f"Unknown summarizer '{name}'. "
+                f"Available: {list(_SUMMARIZERS.keys())}"
+            )
+        if name not in self._instances:
+            self._instances[name] = _SUMMARIZERS[name](device=self.config.device)
+        return self._instances[name]
+
+    def summarize(self, name, texts):
+        """Generate summaries using the specified model.
+
+        Args:
+            name: Model identifier ('bart' or 't5').
+            texts: List of input document strings.
+
+        Returns:
+            List of summary strings.
+        """
+        return self._get_summarizer(name).summarize(texts)
